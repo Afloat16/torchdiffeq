@@ -135,6 +135,8 @@ class FixedGridODESolver(metaclass=abc.ABCMeta):
         dt = self.step_size
 
         sign0 = torch.sign(event_fn(t0, y0))
+        if sign0 == 0:
+            return t0, torch.stack([self.y0, self.y0], dim=0)
         max_itrs = 20000
         itr = 0
         while True:
