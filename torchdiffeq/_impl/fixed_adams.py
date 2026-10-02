@@ -178,6 +178,7 @@ class AdamsBashforthMoulton(FixedGridODESolver):
         self.max_order = int(max_order)
         self.prev_f = collections.deque(maxlen=self.max_order - 1)
         self.prev_t = None
+        self.prev_dt = None
 
         self.bashforth = [x.to(y0.device) for x in _BASHFORTH_DIVISOR]
         self.moulton = [x.to(y0.device) for x in _MOULTON_DIVISOR]
@@ -193,6 +194,14 @@ class AdamsBashforthMoulton(FixedGridODESolver):
         return error_ratio < 1
 
     def _step_func(self, func, t0, dt, t1, y0):
+        dt = torch.as_tensor(dt, dtype=t0.dtype, device=t0.device)
+        # Adams coefficients assume equally spaced history. Restart with RK4
+        # when the grid changes spacing, including a shortened final step.
+        if self.prev_dt is not None and not torch.isclose(
+                dt, self.prev_dt, rtol=10 * torch.finfo(dt.dtype).eps, atol=0):
+            self.prev_f.clear()
+            self.prev_t = None
+        self.prev_dt = dt
         f0 = func(t0, y0, perturb=Perturb.NEXT if self.perturb else Perturb.NONE)
         self._update_history(t0, f0)
         order = min(len(self.prev_f), self.max_order - 1)
